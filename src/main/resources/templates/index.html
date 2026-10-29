@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="_csrf" th:content="${_csrf.token}" />
+    <meta name="_csrf_header" th:content="${_csrf.headerName}" />
+    <title>作業時間ノート</title>
+    <link rel="stylesheet" th:href="@{/app.css}" />
+    <script defer th:src="@{/app.js}"></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <span class="eyebrow">STOPWATCH / DAILY WORK LOG</span>
+        <h1>作業時間ノート</h1>
+      </div>
+      <span class="timezone">Asia/Tokyo</span>
+    </header>
+    <main>
+      <div id="message" role="status" aria-live="polite"></div>
+      <section class="timer card">
+        <div class="section-title">
+          <h2>ストップウォッチ</h2>
+          <span
+            id="timer-state"
+            class="badge"
+            th:text="${timer.status == 'RUNNING' ? '計測中' : '未開始'}"
+            >未開始</span
+          >
+        </div>
+        <p id="selected-name">作業項目を選択してください</p>
+        <output id="elapsed" aria-label="経過時間">00:00:00</output>
+        <p id="long-warning" class="warning" hidden>
+          12時間以上計測しています。保存する場合はストップ、不要な場合は破棄してください。
+        </p>
+        <div class="timer-actions">
+          <button id="start" disabled>スタート</button
+          ><button id="stop" disabled>ストップして保存</button
+          ><button id="cancel" class="danger quiet" disabled>計測を破棄</button>
+        </div>
+        <p class="hint">
+          計測は画面を閉じても続きます。ストップするまで集計には含まれません。
+        </p>
+      </section>
+      <div class="columns">
+        <section class="card">
+          <div class="section-title">
+            <h2>作業項目</h2>
+            <span class="hint">本日の累計</span>
+          </div>
+          <form id="group-form" class="inline">
+            <label class="grow"
+              >新しいグループ<input
+                name="name"
+                required
+                maxlength="100"
+                placeholder="例：案件A" /></label
+            ><button type="submit" class="secondary">追加</button>
+          </form>
+          <form id="item-form" class="stack">
+            <label
+              >グループ<select name="groupId" id="item-group">
+                <option value="">未分類</option>
+                <option
+                  th:each="g:${groups}"
+                  th:value="${g.id}"
+                  th:text="${g.name}"
+                ></option></select
+            ></label>
+            <div class="inline">
+              <label class="grow"
+                >新しい作業項目<input
+                  name="name"
+                  required
+                  maxlength="200"
+                  placeholder="例：詳細設計" /></label
+              ><button type="submit">追加</button>
+            </div>
+          </form>
+          <div id="work-items">
+            <p th:each="i:${items}" th:text="${i.name}"></p>
+          </div>
+          <p id="empty-items" class="hint" hidden>
+            作業項目を追加すると計測を始められます。
+          </p>
+        </section>
+        <section class="card">
+          <h2>作業時間を手動登録</h2>
+          <form id="manual-form" class="stack">
+            <label
+              >作業日<input
+                type="date"
+                name="workDate"
+                th:value="${today}"
+                required /></label
+            ><label
+              >グループで絞り込み<select id="manual-group">
+                <option value="all">すべて</option>
+              </select></label
+            ><label
+              >作業項目<select name="workItemId" id="manual-item" required>
+                <option value="">選択してください</option>
+              </select></label
+            >
+            <div class="inline">
+              <label class="grow"
+                >時間<input
+                  type="number"
+                  name="hours"
+                  min="0"
+                  max="24"
+                  step="1"
+                  value="0"
+                  required /></label
+              ><label class="grow"
+                >分<input
+                  type="number"
+                  name="minutes"
+                  min="0"
+                  max="59"
+                  step="1"
+                  value="0"
+                  required
+              /></label>
+            </div>
+            <label
+              >メモ<textarea
+                name="memo"
+                rows="2"
+                maxlength="10000"
+                placeholder="作業内容の補足（任意）"
+              ></textarea>
+            </label>
+            <p class="hint">1分以上、24時間以内で登録できます。</p>
+            <button type="submit">作業時間を登録</button>
+          </form>
+        </section>
+      </div>
+      <section class="card">
+        <div class="section-title">
+          <h2>日別の作業時間</h2>
+          <div class="inline day-nav">
+            <button id="prev-day" class="quiet" aria-label="前日">←</button
+            ><label class="sr-only" for="summary-date">集計対象日</label
+            ><input
+              id="summary-date"
+              type="date"
+              th:value="${today}"
+              required
+            /><button id="next-day" class="quiet" aria-label="翌日">→</button
+            ><button id="today" class="secondary">今日</button>
+          </div>
+        </div>
+        <div class="daily-total">
+          <span>合計作業時間</span
+          ><strong id="daily-total" th:text="${summary.durationMs}"
+            >00:00:00</strong
+          >
+        </div>
+        <div class="columns">
+          <div>
+            <h3>グループ別</h3>
+            <div id="group-totals"></div>
+          </div>
+          <div>
+            <h3>作業項目別</h3>
+            <div id="item-totals"></div>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="section-title">
+          <h2>作業記録履歴</h2>
+          <span class="hint">上で選択した日の記録</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>作業日 / 時刻</th>
+                <th>グループ / 作業項目</th>
+                <th>記録方法</th>
+                <th>作業時間</th>
+                <th>メモ</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="history"></tbody>
+          </table>
+        </div>
+        <p id="empty-history" class="hint">この日の記録はありません。</p>
+        <p class="hint">
+          日付をまたぐ計測は、各日に重なる時間だけ集計します。履歴の作業時間は記録全体の時間です。
+        </p>
+      </section>
+    </main>
+    <footer>自分の時間を、少しずつ見える形に。</footer>
+    <dialog id="editor">
+      <form id="edit-form" class="stack">
+        <h2 id="edit-title">編集</h2>
+        <div id="edit-fields" class="stack"></div>
+        <p id="edit-error" class="warning" role="alert"></p>
+        <div class="inline">
+          <button type="submit">保存</button
+          ><button type="button" id="close-editor" class="secondary">
+            閉じる
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="confirm-dialog">
+      <h2>確認</h2>
+      <p id="confirm-message"></p>
+      <div class="inline">
+        <button id="confirm-no" class="secondary">キャンセルしない</button
+        ><button id="confirm-yes" class="danger">破棄する</button>
+      </div>
+    </dialog>
+  </body>
+</html>
